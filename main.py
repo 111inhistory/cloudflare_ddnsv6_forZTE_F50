@@ -187,7 +187,7 @@ if __name__ == "__main__":
         "-H", "--router_host", type=str, default="http://192.168.0.1", help="路由器IP地址"
     )
     optional.add_argument("-p", "--router_port", type=int, default=80, help="路由器端口号")
-    optional.add_argument("-t", "--refresh_time", type=int, default=60, help="刷新时间（秒）")
+    optional.add_argument("-t", "--refresh_time", type=int, default=60, help="刷新时间（秒），默认60秒")
     optional.add_argument(
         "--LOG_LEVEL",
         type=str,
