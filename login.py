@@ -24,6 +24,7 @@ password = "admin"
 HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
     "Accept": "application/json, text/javascript, */*; q=0.01",
+    "Referer": host + "/index.html",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
 }
 
@@ -241,7 +242,7 @@ def verify_session():
     try:
         res = session.get(url=API_GET_URL, params=prepare_params(cmd), headers=HEADERS)
     except Exception as e:
-        logger.error(f"Failed to verify session", e)
+        logger.error("Failed to verify session {e}")
         return False
     logger.debug(f"verify session {res.url}:")
     logger.debug(f"status code: {res.status_code}")
@@ -334,6 +335,7 @@ def modify_const(**kwargs):
         host = f"{host}:{kwargs['port']}"
     API_GET_URL = host + goform_get_path
     API_SET_URL = host + goform_set_path
+    HEADERS["Referer"] = host + "/index.html"
     if "password" in kwargs and kwargs["password"]:
         password = kwargs["password"]
 
