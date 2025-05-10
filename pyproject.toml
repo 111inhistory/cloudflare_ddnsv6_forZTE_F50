@@ -1,0 +1,12 @@
+[project]
+name = "cloudflare-ddnsv6"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "black>=25.1.0",
+    "cloudflare>=4.1.0",
+    "requests>=2.32.3",
+    "socksio>=1.0.0",
+]
