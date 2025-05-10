@@ -153,6 +153,40 @@ def get_ipv6_address() -> str:
     return login.get_ipv6_addr()
 
 
+def retry_dns_update(client, zone_name, dns_name, ip_address):
+    """
+    带有重试机制的DNS更新函数
+    重试3次，每次间隔分别为5秒、10秒、20秒
+    """
+    retry_count = 0
+    retry_intervals = [5, 10, 20]
+    max_retries = len(retry_intervals)
+    success = False
+    
+    while retry_count <= max_retries and not success:
+        try:
+            if retry_count > 0:
+                logger.info(f"尝试第{retry_count}次重试DNS更新...")
+            success = do_dns_update(client, zone_name, dns_name, ip_address)
+            if success:
+                if retry_count > 0:
+                    logger.info("DNS更新成功！")
+                break
+            else:
+                logger.warning("DNS更新返回失败")
+        except Exception as e:
+            logger.error(f"DNS更新时出错: {e}")
+        
+        if retry_count < max_retries:
+            wait_time = retry_intervals[retry_count]
+            logger.info(f"等待{wait_time}秒后重试...")
+            time.sleep(wait_time)
+        retry_count += 1
+    
+    if not success and retry_count > max_retries:
+        logger.error("DNS更新失败，已达到最大重试次数")
+    return success
+
 def main(api_key, zone_name, subdomain, refresh_time):
     logger.info("Starting DDNS update main loop")
     # 创建Cloudflare客户端
@@ -164,12 +198,14 @@ def main(api_key, zone_name, subdomain, refresh_time):
     logger.info(f"DNS name: {dns_name}")
     logger.info(f"Current IPv6 address: {ipv6_addr}")
 
-    do_dns_update(client, zone_name, dns_name, ipv6_addr)
+    # 添加重试逻辑
+    retry_dns_update(client, zone_name, dns_name, ipv6_addr)
+    
     while True:
         time.sleep(refresh_time)
         ipv6_addr = get_ipv6_address()
         logger.info(f"Current IPv6 address: {ipv6_addr}")
-        do_dns_update(client, zone_name, dns_name, ipv6_addr)
+        retry_dns_update(client, zone_name, dns_name, ipv6_addr)
 
 
 if __name__ == "__main__":

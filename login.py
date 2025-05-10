@@ -24,7 +24,6 @@ password = "admin"
 HEADERS = {
     "X-Requested-With": "XMLHttpRequest",
     "Accept": "application/json, text/javascript, */*; q=0.01",
-    "Referer": "http://192.168.0.1/index.html",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36 Edg/136.0.0.0",
 }
 
@@ -239,7 +238,11 @@ def verify_session():
         "ppp_status",
         "ethernet_port_specified",
     ]
-    res = session.get(url=API_GET_URL, params=prepare_params(cmd), headers=HEADERS)
+    try:
+        res = session.get(url=API_GET_URL, params=prepare_params(cmd), headers=HEADERS)
+    except Exception as e:
+        logger.error(f"Failed to verify session", e)
+        return False
     logger.debug(f"verify session {res.url}:")
     logger.debug(f"status code: {res.status_code}")
     logger.debug(f"response: {res.text}")
