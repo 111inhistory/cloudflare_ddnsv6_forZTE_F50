@@ -71,9 +71,7 @@ def get_zone_id(client: cloudflare.Cloudflare, zone: str) -> str:
     return ""
 
 
-def get_dns_id(
-    client: cloudflare.Cloudflare, zone_id: str, dns_name: str
-) -> str:
+def get_dns_id(client: cloudflare.Cloudflare, zone_id: str, dns_name: str) -> str:
     global dns_id
     if dns_name in dns_id:
         return dns_id[dns_name]
@@ -90,7 +88,6 @@ def get_dns_id(
 
 def get_dns_record(client: cloudflare.Cloudflare, zone_id: str, dns_id: str) -> Any:
     result = client.dns.records.get(zone_id=zone_id, dns_record_id=dns_id)
-    
 
     if not result:
         return None
@@ -122,19 +119,25 @@ def do_dns_update(
     client: cloudflare.Cloudflare,
     zone_name,
     dns_name,
-    ip_address,
 ):
+    ip_addr = get_ipv6_address()
+    if not ip_addr:
+        logger.error("Failed to get IPv6 address")
+        return False
     zone_id = get_zone_id(client, zone_name)
+    if not zone_id:
+        logger.error(f"Failed to get zone id for {zone_name}")
+        return False
     dns_id = get_dns_id(client, zone_id, dns_name)
     if not dns_id:
         logger.info(f"DNS record {dns_name} not found, creating a new one")
-        create_dns_record(client, zone_id, dns_name, ip_address)
+        create_dns_record(client, zone_id, dns_name, ip_addr)
         dns_id = get_dns_id(client, zone_id, dns_name)
         if not dns_id:
             logger.error(f"Failed to create DNS record {dns_name}")
             return False
     record = get_dns_record(client, zone_id, dns_id)
-    if record.content == ip_address:
+    if record.content == ip_addr:
         logger.info(f"DNS record {dns_name} is up to date")
         return True
     else:
@@ -142,9 +145,9 @@ def do_dns_update(
     client.dns.records.edit(
         zone_id=zone_id,
         dns_record_id=dns_id,
-        content=ip_address,
+        content=ip_addr,
     )
-    logger.info(f"DNS record {dns_name} updated to {ip_address} from {record.content}")
+    logger.info(f"DNS record {dns_name} updated to {ip_addr} from {record.content}")
     return True
 
 
@@ -153,7 +156,7 @@ def get_ipv6_address() -> str:
     return login.get_ipv6_addr()
 
 
-def retry_dns_update(client, zone_name, dns_name, ip_address):
+def retry_dns_update(client, zone_name, dns_name):
     """
     带有重试机制的DNS更新函数
     重试3次，每次间隔分别为5秒、10秒、20秒
@@ -162,68 +165,98 @@ def retry_dns_update(client, zone_name, dns_name, ip_address):
     retry_intervals = [5, 10, 20]
     max_retries = len(retry_intervals)
     success = False
-    
+
     while retry_count <= max_retries and not success:
         try:
             if retry_count > 0:
-                logger.info(f"尝试第{retry_count}次重试DNS更新...")
-            success = do_dns_update(client, zone_name, dns_name, ip_address)
+                logger.info(f"Retrying DNS update ({retry_count}/{max_retries})")
+            success = do_dns_update(client, zone_name, dns_name)
             if success:
-                if retry_count > 0:
-                    logger.info("DNS更新成功！")
-                break
+                logger.info("DNS update success")
             else:
-                logger.warning("DNS更新返回失败")
+                logger.warning("DNS update failed")
         except Exception as e:
-            logger.error(f"DNS更新时出错: {e}")
-        
+            logger.error(f"DNS update failed: {e}")
+
         if retry_count < max_retries:
             wait_time = retry_intervals[retry_count]
-            logger.info(f"等待{wait_time}秒后重试...")
+            logger.info(f"Waiting {wait_time}s to retry")
             time.sleep(wait_time)
         retry_count += 1
-    
+
     if not success and retry_count > max_retries:
-        logger.error("DNS更新失败，已达到最大重试次数")
+        logger.error("DNS update failed and exceeded max retries")
     return success
 
-def main(api_key, zone_name, subdomain, refresh_time):
-    logger.info("Starting DDNS update main loop")
-    # 创建Cloudflare客户端
-    client = create_client(api_key)
 
-    ipv6_addr = get_ipv6_address()
-    dns_name = f"{subdomain}.{zone_name}"
-
-    logger.info(f"DNS name: {dns_name}")
-    logger.info(f"Current IPv6 address: {ipv6_addr}")
-
-    # 添加重试逻辑
-    retry_dns_update(client, zone_name, dns_name, ipv6_addr)
-    
+def main(
+    api_key: str, zone_name: str, subdomain: str, refresh_time: int, no_exit: bool
+):
+    # 循环运行，当no_exit=True时，即使遇到异常也会继续
     while True:
-        time.sleep(refresh_time)
-        ipv6_addr = get_ipv6_address()
-        logger.info(f"Current IPv6 address: {ipv6_addr}")
-        retry_dns_update(client, zone_name, dns_name, ipv6_addr)
+        try:
+            logger.info("Starting DDNS update main loop")
+            # 创建Cloudflare客户端
+            client = create_client(api_key)
+
+            ipv6_addr = get_ipv6_address()
+            dns_name = f"{subdomain}.{zone_name}"
+
+            logger.info(f"DNS name: {dns_name}")
+            logger.info(f"Current IPv6 address: {ipv6_addr}")
+
+            # 内部更新循环
+            while True:
+                if not retry_dns_update(client, zone_name, dns_name) and not no_exit:
+                    logger.error("DNS update failed，exiting...")
+                    return
+                time.sleep(refresh_time)
+
+        except KeyboardInterrupt:
+            logger.info("Received keyboard interrupt, exiting...")
+            return
+        except Exception as e:
+            logger.error(f"Found Error: {e}")
+            if not no_exit:
+                logger.error("Exiting as no_exit is not set...")
+                return
+
+            # 当设置了no_exit时，在继续前先等待一定时间
+            wait_time = 30  # 失败后等待30秒再重启主循环
+            logger.info(f"Restarting main loop in {wait_time} seconds...")
+            time.sleep(wait_time)
+            logger.info("Restarting main loop...")
+            # 继续循环而非递归调用
 
 
 if __name__ == "__main__":
     # 解析命令行参数
     parser = argparse.ArgumentParser(description="Cloudflare DDNS IPv6更新工具")
-    parser.add_argument(
-        "router_password", type=str, help="路由器登录密码"
-    )
+    parser.add_argument("router_password", type=str, help="路由器登录密码")
     required = parser.add_argument_group("必选参数")
-    required.add_argument("-a", "--api_key", type=str, required=True, help="Cloudflare API密钥")
-    required.add_argument("-z", "--zone_name", type=str,required=True, help="域名区域名称，如example.com")
-    required.add_argument("-n", "--subdomain", required=True, type=str, help="子域名，如www")
+    required.add_argument(
+        "-a", "--api_key", type=str, required=True, help="Cloudflare API密钥"
+    )
+    required.add_argument(
+        "-z", "--zone_name", type=str, required=True, help="域名区域名称，如example.com"
+    )
+    required.add_argument(
+        "-n", "--subdomain", required=True, type=str, help="子域名，如www"
+    )
     optional = parser.add_argument_group("可选参数")
     optional.add_argument(
-        "-H", "--router_host", type=str, default="http://192.168.0.1", help="路由器IP地址"
+        "-H",
+        "--router_host",
+        type=str,
+        default="http://192.168.0.1",
+        help="路由器IP地址",
     )
-    optional.add_argument("-p", "--router_port", type=int, default=80, help="路由器端口号")
-    optional.add_argument("-t", "--refresh_time", type=int, default=60, help="刷新时间（秒），默认60秒")
+    optional.add_argument(
+        "-p", "--router_port", type=int, default=80, help="路由器端口号"
+    )
+    optional.add_argument(
+        "-t", "--refresh_time", type=int, default=60, help="刷新时间（秒），默认60秒"
+    )
     optional.add_argument(
         "--LOG_LEVEL",
         type=str,
@@ -232,7 +265,9 @@ if __name__ == "__main__":
         help="日志级别",
     )
     optional.add_argument("--log_file", type=str, help="日志文件路径")
-
+    optional.add_argument(
+        "--no_exit", action="store_true", default=False, help="不退出程序"
+    )
     args = parser.parse_args()
 
     # 设置日志级别和文件
@@ -240,9 +275,7 @@ if __name__ == "__main__":
 
     # 设置路由器连接参数
     login.modify_const(
-        host=args.router_host,
-        port=args.router_port,
-        password=args.router_password
+        host=args.router_host, port=args.router_port, password=args.router_password
     )
 
-    main(args.api_key, args.zone_name, args.subdomain, args.refresh_time)
+    main(args.api_key, args.zone_name, args.subdomain, args.refresh_time, args.no_exit)
