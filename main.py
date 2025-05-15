@@ -151,7 +151,6 @@ def do_dns_update(
     return True
 
 
-# This function gets IPv6 address using dig method.
 def get_ipv6_address() -> str:
     return login.get_ipv6_addr()
 
@@ -178,7 +177,7 @@ def retry_dns_update(client, zone_name, dns_name):
         except Exception as e:
             logger.error(f"DNS update failed: {e}")
 
-        if retry_count < max_retries:
+        if not success and retry_count < max_retries:
             wait_time = retry_intervals[retry_count]
             logger.info(f"Waiting {wait_time}s to retry")
             time.sleep(wait_time)
