@@ -1,4 +1,4 @@
-name: Build Executables
+name: Releases Packed
 
 on:
   push:
@@ -22,7 +22,7 @@ jobs:
           - os: macos-latest
             type: macos
             arch: x86_64
-          - os: ubuntu-22.04-arm64
+          - os: ubuntu-24.04-arm
             type: linux
             arch: arm64
 
@@ -61,8 +61,19 @@ jobs:
           path: |
             dist/cloudflare_ddnsv6-${{ matrix.os }}-${{ matrix.arch }}*
 
+  release:
+    runs-on: ubuntu-latest
+    name: Create Release
+    needs: build
+    if: github.ref_type == 'tag'
+    steps:
+      - name: Download Builds
+        uses: actions/download-artifact@v4.3.0
+        with:
+          path: dist/
+      
       - name: GH Release
         uses: softprops/action-gh-release@v2.2.2
         with:
-          tag_name: ${{ github.ref }}
-          files: dist/cloudflare_ddnsv6-${{ matrix.os }}-${{ matrix.arch }}*
+          tag_name: ${{ github.ref_name }}
+          files: dist/*
