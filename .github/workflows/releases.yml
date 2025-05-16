@@ -65,6 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     name: Create Release
     needs: build
+    if: github.ref_type == 'tag'
     steps:
       - name: Download Builds
         uses: actions/download-artifact@v4.3.0
@@ -75,4 +76,4 @@ jobs:
         uses: softprops/action-gh-release@v2.2.2
         with:
           tag_name: ${{ github.ref_name }}
-          files: dist/cloudflare_ddnsv6-*
+          files: dist/*
