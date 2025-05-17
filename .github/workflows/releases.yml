@@ -71,9 +71,12 @@ jobs:
         uses: actions/download-artifact@v4.3.0
         with:
           path: dist/
+
+      - name: List all Files
+        run: ls -R
       
-      - name: GH Release
-        uses: softprops/action-gh-release@v2.2.2
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: dist/*
+      # - name: GH Release
+      #   uses: softprops/action-gh-release@v2.2.2
+      #   with:
+      #     tag_name: ${{ github.ref_name }}
+      #     files: dist/*
