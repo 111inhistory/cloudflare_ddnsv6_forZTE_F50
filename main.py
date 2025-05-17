@@ -47,7 +47,7 @@ def set_logger(log_level, log_file=None):
         logger.info(f"日志将写入文件: {log_file}")
 
 
-def create_client(api_token: str) -> bool:
+def create_client(api_token: str) -> cloudflare.Cloudflare:
     try:
         client = cloudflare.Cloudflare(api_token=api_token)
     except cloudflare.CloudflareError as e:
@@ -71,11 +71,11 @@ def get_zone_id(client: cloudflare.Cloudflare, zone: str) -> str:
     return ""
 
 
-def get_dns_id(client: cloudflare.Cloudflare, zone_id: str, dns_name: str) -> str:
+def get_dns_id(client: cloudflare.Cloudflare, zone_id: str, dns_name: str) -> Optional[str]:
     global dns_id
     if dns_name in dns_id:
         return dns_id[dns_name]
-    dns_records = client.dns.records.list(zone_id=zone_id, name=dns_name, type=RRTYPE)
+    dns_records = client.dns.records.list(zone_id=zone_id, name=dns_name, type=RRTYPE) # type: ignore
     if not dns_records:
         return None
     result = dns_records.result
@@ -151,7 +151,7 @@ def do_dns_update(
     return True
 
 
-def get_ipv6_address() -> str:
+def get_ipv6_address() -> Optional[str]:
     return login.get_ipv6_addr()
 
 

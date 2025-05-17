@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 from requests.sessions import Session
 from requests import Request, Response
 from hashlib import sha256
@@ -180,7 +180,7 @@ def set_logger(log_level, log_file=None):
 def prepare_params(args: list) -> Dict[str, str]:
     if len(args) == 0:
         return {}
-    params = {
+    params: Dict[str, Any] = {
         "isTest": False,
     }
     if len(args) == 1:
@@ -308,7 +308,7 @@ def login():
         return False
 
 
-def get_ipv6_addr():
+def get_ipv6_addr() -> Optional[str]:
     cmd = ["ipv6_wan_ipaddr"]
     req = Request(
         method="GET",
@@ -388,5 +388,5 @@ if __name__ == "__main__":
             print(result)
     else:
         logger.error(f"未知操作: {args.operation}")
-        logger.info(f"可用操作: {", ".join(operations.keys())}")
+        logger.info("可用操作: {"+ ", ".join(operations.keys()) + "}")
         sys.exit(1)
