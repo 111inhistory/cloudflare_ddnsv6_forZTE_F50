@@ -1,7 +1,7 @@
 [project]
 name = "cloudflare-ddnsv6"
-version = "0.1.1"
-description = "Add your description here"
+version = "0.1.2"
+description = "A tool to update Cloudflare DNS records with IPv6 addresses"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
