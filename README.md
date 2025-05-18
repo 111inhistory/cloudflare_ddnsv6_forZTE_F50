@@ -7,8 +7,8 @@ Thanks [termux-cloudflare-ddns-script](https://github.com/xiongnemo/termux-cloud
 ## Usage
 
 ```bash
-usage: main.py [-h] -a API_KEY -z ZONE_NAME -n SUBDOMAIN [-H ROUTER_HOST] [-p ROUTER_PORT] [-t REFRESH_TIME]
-               [--LOG_LEVEL {DEBUG,INFO,WARNING,ERROR,CRITICAL}] [--log_file LOG_FILE]
+usage: main.py [-h] -a API_KEY -z ZONE_NAME -n SUBDOMAIN [-H ROUTER_HOST] [-p ROUTER_PORT] [-t REFRESH_TIME] [--LOG_LEVEL {DEBUG,INFO,WARNING,ERROR,CRITICAL}]
+               [--log_file LOG_FILE] [--no_exit]
                router_password
 
 Cloudflare DDNS IPv6更新工具
@@ -33,10 +33,11 @@ options:
   -p ROUTER_PORT, --router_port ROUTER_PORT
                         路由器端口号
   -t REFRESH_TIME, --refresh_time REFRESH_TIME
-                        刷新时间（秒）
+                        刷新时间（秒），默认60秒
   --LOG_LEVEL {DEBUG,INFO,WARNING,ERROR,CRITICAL}
                         日志级别
   --log_file LOG_FILE   日志文件路径
+  --no_exit             不退出程序
 ```
 
 Note: port `8080` should be used when the scripts is running in F50 itself.

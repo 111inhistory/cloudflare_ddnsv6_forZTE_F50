@@ -37,7 +37,6 @@ class ServerError(Exception):
     pass
 
 
-# region
 """
 cmd_list = [
     "wifi_onoff_state",
@@ -142,7 +141,6 @@ single_cmd_list = [
     "queryAccessPointInfo",
 ]
 """
-# endregion
 
 
 def set_logger(log_level, log_file=None):
