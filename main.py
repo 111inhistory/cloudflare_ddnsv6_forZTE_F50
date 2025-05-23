@@ -4,10 +4,13 @@ import cloudflare
 import logging
 import argparse
 
-from typing import Any, List, Tuple, Optional
+from typing import Any, Optional
+from logging import handlers
 
 # 获取logger
 logger = logging.getLogger(__name__)
+MAX_LOG_SIZE = 1024 * 1024 * 2  # 2MB
+BACKUP_COUNT = 5  # Max 5 backup files of logs
 
 RRTYPE = "AAAA"
 refresh_time = 60
@@ -15,7 +18,7 @@ zone_id = {}
 dns_id = {}
 
 
-def set_logger(log_level, log_file=None):
+def set_logger(log_level: str, log_file=None):
     """设置日志级别和日志文件（如果提供）"""
     numeric_level = getattr(logging, log_level.upper(), None)
     if not isinstance(numeric_level, int):
@@ -29,7 +32,10 @@ def set_logger(log_level, log_file=None):
 
     # 如果提供了日志文件，创建文件处理器
     if log_file:
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        # file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler = handlers.RotatingFileHandler(
+            log_file, maxBytes=MAX_LOG_SIZE, backupCount=BACKUP_COUNT, encoding="utf-8"
+        )
         log_handlers.append(file_handler)
 
     # 配置根日志记录器
@@ -51,9 +57,9 @@ def create_client(api_token: str) -> cloudflare.Cloudflare:
     try:
         client = cloudflare.Cloudflare(api_token=api_token)
     except cloudflare.CloudflareError as e:
-        logger.error("Verify token failed. Please check your token")
-        logger.debug(f"Error: {e}")
-        logger.debug(f"api_token: {api_token}")
+        logger.error("[create_client] Verify token failed. Please check your token")
+        logger.debug(f"[create_client] Error: {e}")
+        logger.debug(f"[create_client] api_token: {api_token}")
         exit(1)
     return client
 
@@ -65,23 +71,25 @@ def get_zone_id(client: cloudflare.Cloudflare, zone: str) -> str:
     result = client.zones.list(name=zone)
     if result.result:
         zone_id = result.result[0].id
-        logger.debug(f"Zone id of {zone} found {zone_id}")
+        logger.debug(f"[get_zone_id] Zone id of {zone} found {zone_id}")
         return zone_id
-    logger.error(f"Get zone id of {zone} failed. Please check your zone name")
+    logger.error(f"[get_zone_id] Get zone id of {zone} failed. Please check your zone name")
     return ""
 
 
-def get_dns_id(client: cloudflare.Cloudflare, zone_id: str, dns_name: str) -> Optional[str]:
+def get_dns_id(
+    client: cloudflare.Cloudflare, zone_id: str, dns_name: str
+) -> Optional[str]:
     global dns_id
     if dns_name in dns_id:
         return dns_id[dns_name]
-    dns_records = client.dns.records.list(zone_id=zone_id, name=dns_name, type=RRTYPE) # type: ignore
+    dns_records = client.dns.records.list(zone_id=zone_id, name=dns_name, type=RRTYPE)  # type: ignore
     if not dns_records:
         return None
     result = dns_records.result
     for i in result:
         if i.name == dns_name and i.type == RRTYPE:
-            logger.debug(f"DNS id of {dns_name} found {i.id}")
+            logger.debug(f"[get_dns_id] DNS id of {dns_name} found {i.id}")
             return i.id
     return None
 
@@ -92,13 +100,13 @@ def get_dns_record(client: cloudflare.Cloudflare, zone_id: str, dns_id: str) -> 
     if not result:
         return None
     if result.id == dns_id and result.type == RRTYPE:
-        logger.debug(f"DNS record {dns_id} found")
-        logger.debug(f"DNS record {dns_id} content: {result.content}")
-        logger.debug(f"DNS record {dns_id} name: {result.name}")
-        logger.debug(f"DNS record {dns_id} type: {result.type}")
-        logger.debug(f"DNS record {dns_id} ttl: {result.ttl}")
-        logger.debug(f"DNS record {dns_id} proxied: {result.proxied}")
-        logger.debug(f"DNS record {dns_id} comment: {result.comment}")
+        logger.debug(f"[get_dns_record] DNS record {dns_id} found")
+        logger.debug(f"[get_dns_record] DNS record {dns_id} content: {result.content}")
+        logger.debug(f"[get_dns_record] DNS record {dns_id} name: {result.name}")
+        logger.debug(f"[get_dns_record] DNS record {dns_id} type: {result.type}")
+        logger.debug(f"[get_dns_record] DNS record {dns_id} ttl: {result.ttl}")
+        logger.debug(f"[get_dns_record] DNS record {dns_id} proxied: {result.proxied}")
+        logger.debug(f"[get_dns_record] DNS record {dns_id} comment: {result.comment}")
         return result
     return None
 
@@ -122,32 +130,32 @@ def do_dns_update(
 ):
     ip_addr = get_ipv6_address()
     if not ip_addr:
-        logger.error("Failed to get IPv6 address")
+        logger.error("[update_dns] Failed to get IPv6 address")
         return False
     zone_id = get_zone_id(client, zone_name)
     if not zone_id:
-        logger.error(f"Failed to get zone id for {zone_name}")
+        logger.error(f"[update_dns] Failed to get zone id for {zone_name}")
         return False
     dns_id = get_dns_id(client, zone_id, dns_name)
     if not dns_id:
-        logger.info(f"DNS record {dns_name} not found, creating a new one")
+        logger.info(f"[update_dns] DNS record {dns_name} not found, creating a new one")
         create_dns_record(client, zone_id, dns_name, ip_addr)
         dns_id = get_dns_id(client, zone_id, dns_name)
         if not dns_id:
-            logger.error(f"Failed to create DNS record {dns_name}")
+            logger.error(f"[update_dns] Failed to create DNS record {dns_name}")
             return False
     record = get_dns_record(client, zone_id, dns_id)
     if record.content == ip_addr:
-        logger.info(f"DNS record {dns_name} is up to date")
+        logger.info(f"[update_dns] DNS record {dns_name} is up to date")
         return True
     else:
-        logger.info(f"DNS record {dns_name} is not up to date, updating it")
+        logger.info(f"[update_dns] DNS record {dns_name} is not up to date, updating it")
     client.dns.records.edit(
         zone_id=zone_id,
         dns_record_id=dns_id,
         content=ip_addr,
     )
-    logger.info(f"DNS record {dns_name} updated to {ip_addr} from {record.content}")
+    logger.info(f"[update_dns] DNS record {dns_name} updated to {ip_addr} from {record.content}")
     return True
 
 
@@ -168,23 +176,23 @@ def retry_dns_update(client, zone_name, dns_name):
     while retry_count <= max_retries and not success:
         try:
             if retry_count > 0:
-                logger.info(f"Retrying DNS update ({retry_count}/{max_retries})")
+                logger.info(f"[retry_dns_update] Retrying DNS update ({retry_count}/{max_retries})")
             success = do_dns_update(client, zone_name, dns_name)
             if success:
-                logger.info("DNS update success")
+                logger.info("[retry_dns_update] DNS update success")
             else:
-                logger.warning("DNS update failed")
+                logger.warning("[retry_dns_update] DNS update failed")
         except Exception as e:
-            logger.error(f"DNS update failed: {e}")
+            logger.error(f"[retry_dns_update] DNS update failed: {e}")
 
         if not success and retry_count < max_retries:
             wait_time = retry_intervals[retry_count]
-            logger.info(f"Waiting {wait_time}s to retry")
+            logger.info(f"[retry_dns_update] Waiting {wait_time}s to retry")
             time.sleep(wait_time)
         retry_count += 1
 
     if not success and retry_count > max_retries:
-        logger.error("DNS update failed and exceeded max retries")
+        logger.error("[retry_dns_update] DNS update failed and exceeded max retries")
     return success
 
 
@@ -194,37 +202,37 @@ def main(
     # 循环运行，当no_exit=True时，即使遇到异常也会继续
     while True:
         try:
-            logger.info("Starting DDNS update main loop")
+            logger.info("[main] Starting DDNS update main loop")
             # 创建Cloudflare客户端
             client = create_client(api_key)
 
             ipv6_addr = get_ipv6_address()
             dns_name = f"{subdomain}.{zone_name}"
 
-            logger.info(f"DNS name: {dns_name}")
-            logger.info(f"Current IPv6 address: {ipv6_addr}")
+            logger.info(f"[main] DNS name: {dns_name}")
+            logger.info(f"[main] Current IPv6 address: {ipv6_addr}")
 
             # 内部更新循环
             while True:
                 if not retry_dns_update(client, zone_name, dns_name) and not no_exit:
-                    logger.error("DNS update failed，exiting...")
+                    logger.error("[main] DNS update failed，exiting...")
                     return
                 time.sleep(refresh_time)
 
         except KeyboardInterrupt:
-            logger.info("Received keyboard interrupt, exiting...")
+            logger.info("[main] Received keyboard interrupt, exiting...")
             return
         except Exception as e:
-            logger.error(f"Found Error: {e}")
+            logger.error(f"[main] Found Error: {e}")
             if not no_exit:
-                logger.error("Exiting as no_exit is not set...")
+                logger.error("[main] Exiting as no_exit is not set...")
                 return
 
             # 当设置了no_exit时，在继续前先等待一定时间
             wait_time = 30  # 失败后等待30秒再重启主循环
-            logger.info(f"Restarting main loop in {wait_time} seconds...")
+            logger.info(f"[main] Restarting main loop in {wait_time} seconds...")
             time.sleep(wait_time)
-            logger.info("Restarting main loop...")
+            logger.info("[main] Restarting main loop...")
             # 继续循环而非递归调用
 
 

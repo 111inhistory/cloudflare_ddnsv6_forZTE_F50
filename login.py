@@ -2,6 +2,7 @@ from typing import Dict, Optional, Any
 from requests.sessions import Session
 from requests import Request, Response
 from hashlib import sha256
+from logging import handlers
 import time
 import logging
 import argparse  # 添加argparse模块用于命令行参数解析
@@ -15,6 +16,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+MAX_LOG_SIZE = 1024 * 1024 * 2  # 2MB
+BACKUP_COUNT = 5  # Max 5 backup files of logs
 host = "http://192.168.0.1"
 goform_get_path = "/goform/goform_get_cmd_process"
 goform_set_path = "/goform/goform_set_cmd_process"
@@ -157,7 +160,9 @@ def set_logger(log_level, log_file=None):
 
     # 如果提供了日志文件，创建文件处理器
     if log_file:
-        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler = handlers.RotatingFileHandler(
+            log_file, maxBytes=MAX_LOG_SIZE, backupCount=BACKUP_COUNT, encoding="utf-8"
+        )
         log_handlers.append(file_handler)
 
     # 配置根日志记录器
@@ -187,29 +192,29 @@ def prepare_params(args: list) -> Dict[str, str]:
         params["cmd"] = ",".join(args)
         params["multi_data"] = 1
     params["_"] = str(int(time.time() * 1000))
-    logger.debug(f"get request params: {params}")
+    logger.debug(f"[login] get request params: {params}")
     return params
 
 
 def send(req: Request, *, try_time: int = 3) -> Optional[Response]:
     try:
         status = verify_session()
-    except ServerError as e:
+    except ServerError:
         return None
     if not status and try_time > 0:
-        logger.info("Session expired, re-login.")
+        logger.info("[login] Session expired, re-login.")
         login()
 
-    logger.debug(f"send request: {req.url}")
-    logger.debug(f"send request method: {req.method}")
-    logger.debug(f"send request params: {req.params}")
-    logger.debug(f"send request data: {req.data}")
-    logger.debug(f"send request headers: {req.headers}")
-    logger.debug(f"send request cookies: {session.cookies.get_dict()}")
+    logger.debug(f"[login] send request: {req.url}")
+    logger.debug(f"[login] send request method: {req.method}")
+    logger.debug(f"[login] send request params: {req.params}")
+    logger.debug(f"[login] send request data: {req.data}")
+    logger.debug(f"[login] send request headers: {req.headers}")
+    logger.debug(f"[login] send request cookies: {session.cookies.get_dict()}")
     try:
         res = session.send(req.prepare(), timeout=5)
     except Exception as e:
-        logger.error(f"Request failed: {e}")
+        logger.error(f"[login] Request failed: {e}")
         return None
     if res.status_code == 401 and try_time > 0:
         relogin = False
@@ -217,14 +222,14 @@ def send(req: Request, *, try_time: int = 3) -> Optional[Response]:
             if try_time <= 0:
                 logger.error("Failed to re-login.")
                 return None
-            logger.info(f"Session expired, re-login. {try_time} times left.")
+            logger.info(f"[login] Session expired, re-login. {try_time} times left.")
             try_time -= 1
             relogin = login()
         if "_" in req.params:
             req.params["_"] = str(int(time.time() * 1000))
         return send(req, try_time=try_time)
     elif res.status_code != 200:
-        logger.error(f"Request failed: {res.status_code}")
+        logger.error(f"[login] Request failed: {res.status_code}")
         return None
     return res
 
@@ -240,12 +245,12 @@ def verify_session():
     try:
         res = session.get(url=API_GET_URL, params=prepare_params(cmd), headers=HEADERS)
     except Exception as e:
-        logger.error("Failed to verify session {e}")
+        logger.error(f"[login] Failed to verify session {e}")
         return False
-    logger.debug(f"verify session {res.url}:")
-    logger.debug(f"status code: {res.status_code}")
-    logger.debug(f"response: {res.text}")
-    logger.debug(f"cookie: {session.cookies.get_dict()}")
+    logger.debug(f"[login] verify session {res.url}:")
+    logger.debug(f"[login] status code: {res.status_code}")
+    logger.debug(f"[login] response: {res.text}")
+    logger.debug(f"[login] cookie: {session.cookies.get_dict()}")
     if res.status_code != 200:
         raise ServerError("The server is not responding.")
     elif res.json().get("loginfo") == "ok":
@@ -263,15 +268,15 @@ def login():
         params=prepare_params(cmd),
         headers=HEADERS,
     )
-    logger.debug(f"getting LD param")
+    logger.debug("[login] getting LD param")
     res: Optional[Response] = send(req, try_time=0)
     if res is None:
-        logger.error("Failed to get response from the server.")
+        logger.error("[login] Failed to get response from the server.")
         return False
     LD: str = res.json().get("LD")
-    logger.debug(f"LD param: {LD}")
+    logger.debug(f"[login] LD param: {LD}")
     if not LD:
-        logger.error("Failed to get LD param.")
+        logger.error("[login] Failed to get LD param.")
         return False
 
     # Construct login request
@@ -295,14 +300,14 @@ def login():
     )
     res = send(req, try_time=0)
     if res is None:
-        logger.error("Failed to get response from the server.")
+        logger.error("[login] Failed to get response from the server.")
         return False
 
     if res.json().get("result") == 0:
-        logger.info("Login successful.")
+        logger.info("[login] Login successful.")
         return True
     else:
-        logger.error("Login failed.")
+        logger.error("[login] Login failed.")
         return False
 
 
@@ -316,11 +321,11 @@ def get_ipv6_addr() -> Optional[str]:
     )
     res = send(req)
     if res is None:
-        logger.error("Failed to get response from the server.")
+        logger.error("[login] Failed to get response from the server.")
         return None
     else:
         ipv6_addr = res.json().get("ipv6_wan_ipaddr")
-        logger.info(f"Current WAN IPv6 addr: {ipv6_addr}")
+        logger.info(f"[login] Current WAN IPv6 addr: {ipv6_addr}")
         return ipv6_addr
 
 
@@ -386,5 +391,5 @@ if __name__ == "__main__":
             print(result)
     else:
         logger.error(f"未知操作: {args.operation}")
-        logger.info("可用操作: {"+ ", ".join(operations.keys()) + "}")
+        logger.info("可用操作: {" + ", ".join(operations.keys()) + "}")
         sys.exit(1)
